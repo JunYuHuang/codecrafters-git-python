@@ -1,0 +1,42 @@
+# Notes:
+
+- PEDAC: Problem
+    - input:
+        - `command`: string
+            - format `hash-object -w <file>` where `<file>`:
+                - is a name of a file that is at the local Git repo root dir
+                - should be at `./<file>`
+    - output:
+        - N/A
+    - side effects:
+        - if `<file>` exists,
+            - prints `<file>`'s SHA-1 40-char hash `file_sha`
+            - creates a zlib-compressed blob file at `./git/<file_sha[:2]>/<file_sha[2:]>`
+- PEDAC: Examples
+    - `hash-object -w 3b18e512dba79e4c8300dd08aeb37f8e728b8dad`
+- PEDAC: Data Structures And Algorithms
+    - blob object anatomy (decompressed): `blob <size>\0<content>`
+        - `<size>`: size in bytes of `<file>` before zlib compression
+        - `\0`: a null byte
+        - `<contents>`: contents of `<file>`
+    - if `command` doesn't match expected syntax format,
+        - return
+    - if `file` doesn't exist,
+        - return
+    - open `file` as file descriptor object `file_fd`
+    - set `size` = size of `file` in bytes
+    - set `content` = all read text content in `file_fd` in UTF-8 encoding
+    - open binary file descriptor object `blob_fd`
+    - write the following as bytes in order to `blob_fd`:
+        - string `blob `
+        - `size`
+        - `\0` (null byte)
+        - `content`
+    - compress `blob_fd` via zlib as `blob_compressed`
+    - set `file_sha` to `file` converted to a SHA-1 40-char string
+    - create new directory at `./.git/objects/<file_sha[:2]>`
+    - set `blob_name` to `<file_sha[2:]>`
+    - write `blob_compressed` to file at `./.git/<file_sha[:2]>/<blob_name>`
+    - close `file_fd`
+    - close `blob_fd`
+    - close `blob_compressed`

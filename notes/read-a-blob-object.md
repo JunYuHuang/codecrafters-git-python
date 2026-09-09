@@ -1,0 +1,25 @@
+# Notes:
+
+- PEDAC: Problem
+    - input:
+        - `command`: string
+            - format `cat-file -p <object_sha>` where `<object_sha>`:
+                - is a 40-char SHA-1 hash that represents a blob (Binary Large OBject) file
+                - should be at `./.git/objects/<object_sha[:2]>/<object_sha[2:]`
+    - output:
+        - N/A
+    - side effects:
+        - if `<object_sha>` exists,
+            - prints file `<object_sha>`'s contents w/o ending newline char
+- PEDAC: Examples
+    - `cat-file -p 3b18e512dba79e4c8300dd08aeb37f8e728b8dad`
+- PEDAC: Data Structures And Algorithms
+    - blob object anatomy (decompressed): `blob <size>\0<content>`
+        - `\0`: a null byte
+        - `<contents>`: contents of the file
+    - if file at `./.git/objects/<object_sha[:2]>/<object_sha[2:]` doesn't exist,
+        - throw error
+    - open file `./.git/objects/<object_sha[:2]>/<object_sha[2:]` as `blob_fd`
+    - decompress file `blob_fd` via `zlib` compression as `decompressed_blob`
+    - find index of first occurrence of null byte `\0` in `decompressed_blob` as `null_pos`
+    - print string `<decompressed_blob[null_pos:]>` to standard output

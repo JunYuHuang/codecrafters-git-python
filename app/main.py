@@ -5,7 +5,7 @@ import hashlib
 
 def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
-    print("Logs from your program will appear here!", file=sys.stderr)
+    # print("Logs from your program will appear here!", file=sys.stderr)
 
     command = sys.argv[1] if len(sys.argv) > 1 else ""
     if command == "init":
@@ -29,7 +29,7 @@ def main():
         blob_uncompressed_str = blob_uncompressed_bytes.decode()
         blob_compressed_fd.close()
         null_pos = blob_uncompressed_str.find("\0")
-        
+
         print(blob_uncompressed_str[null_pos + 1:], end="")
     elif command == "hash-object":
         if len(sys.argv) != 4 or sys.argv[2] != "-w" or len(sys.argv[3]) < 1:
@@ -41,15 +41,15 @@ def main():
             return
 
         # Create Gib blob object and compress it
-        file_size = os.stat(file).st_size
         file_fd = open(file, "r")
         file_contents = file_fd.read()
-        file_hash = hashlib.sha1(file.encode()).hexdigest()
-        file_fd.close()
+        file_size = len(file_contents)
         blob_contents_str = f"blob {file_size}\0{file_contents}"
         blob_contents_compressed_bytes = zlib.compress(blob_contents_str.encode())
+        file_fd.close()
 
         # Write compressed Git blob object to file
+        file_hash = hashlib.sha1(blob_contents_str.encode()).hexdigest()
         blob_dir = file_hash[:2]
         blob_name = file_hash[2:]
         blob_path = f".{os.sep}.git{os.sep}objects{os.sep}{blob_dir}"

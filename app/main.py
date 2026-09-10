@@ -27,9 +27,10 @@ def main():
         blob_compressed_fd = open(blob_path, "rb")
         blob_uncompressed_bytes = zlib.decompress(blob_compressed_fd.read())
         blob_uncompressed_str = blob_uncompressed_bytes.decode()
-        null_pos = blob_uncompressed_str.find("\0")
-        print(blob_uncompressed_str[null_pos + 1:], end="")
         blob_compressed_fd.close()
+        null_pos = blob_uncompressed_str.find("\0")
+        
+        print(blob_uncompressed_str[null_pos + 1:], end="")
     elif command == "hash-object":
         if len(sys.argv) != 4 or sys.argv[2] != "-w" or len(sys.argv[3]) < 1:
             print("[Error] Usage: hash-object -w <file>")
@@ -39,28 +40,25 @@ def main():
             print(f"[Error] File '{file}' does not exist")
             return
 
-        # Get file stats for making Git blob object
-        file_size = os.stat("file").st_size
+        # Create Gib blob object and compress it
+        file_size = os.stat(file).st_size
         file_fd = open(file, "r")
         file_contents = file_fd.read()
         file_hash = hashlib.sha1(file.encode()).hexdigest()
         file_fd.close()
+        blob_contents_str = f"blob {file_size}\0{file_contents}"
+        blob_contents_compressed_bytes = zlib.compress(blob_contents_str.encode())
 
-        # TODO: 
-        # - Create Git blob object string
-        # - Compress it via zlib
-        # - Convert it to a bytes-like object
+        # Write compressed Git blob object to file
         blob_dir = file_hash[:2]
         blob_name = file_hash[2:]
-
-        # TOD: Create compressed Git blob object file
         blob_path = f".{os.sep}.git{os.sep}objects{os.sep}{blob_dir}"
         if not os.path.exists(blob_path):
             os.mkdir(blob_path)
         with open(f"{blob_path}{os.sep}{blob_name}", "wb") as blob_fd:
-            blob_fd.write("TODO")
+            blob_fd.write(blob_contents_compressed_bytes)
 
-        print(file_hash, end="")
+        print(file_hash)
     else:
         raise RuntimeError(f"Unknown command #{command}")
 

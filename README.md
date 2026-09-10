@@ -57,3 +57,12 @@ alias mygit=/path/to/your/repo/your_program.sh
 mkdir -p /tmp/testing && cd /tmp/testing
 mygit init
 ```
+
+Alternative:
+```sh
+python {path to '/app/main.py'} {your Git command arguments}
+
+# Example:
+cd test_git_repo
+python ../app/main.py init
+```

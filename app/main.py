@@ -4,7 +4,6 @@ import zlib
 import hashlib
 
 def main():
-    # You can use print statements as follows for debugging, they'll be visible when running tests.
     # print("Logs from your program will appear here!", file=sys.stderr)
 
     command = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -59,6 +58,17 @@ def main():
             blob_fd.write(blob_contents_compressed_bytes)
 
         print(file_hash)
+    # TODO
+    elif command == "ls-tree":
+        if len(sys.argv) != 4 or sys.argv[2] != "-w" or len(sys.argv[3]) < 1:
+            print("[Error] Usage: ls-tree [--name-only] <tree_sha>")
+            return
+        file = sys.argv[3]
+        if not os.path.exists(file):
+            print(f"[Error] File '{file}' does not exist")
+            return
+
+        # TODO
     else:
         raise RuntimeError(f"Unknown command #{command}")
 

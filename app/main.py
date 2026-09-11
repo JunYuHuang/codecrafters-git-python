@@ -60,10 +60,11 @@ def main():
         print(file_hash)
     # TODO: add non-`--name-only` flagged `ls-tree` functionality
     elif command == "ls-tree":
-        if not (3 <= len(sys.argv) <= 4):
+        passed_args_count = len(sys.argv)
+        if not (3 <= passed_args_count <= 4):
             print("[Error] Usage: ls-tree [--name-only] <tree_sha>")
             return
-        tree_sha = sys.argv[-1]
+        tree_sha = sys.argv[2] if passed_args_count == 3 else sys.argv[3]
         tree_path = f".{os.sep}.git{os.sep}objects{os.sep}{tree_sha[:2]}{os.sep}{tree_sha[2:]}"
         if not os.path.exists(tree_path):
             print(f"[Error] Tree object with hash '{tree_sha}' does not exist")

@@ -60,7 +60,7 @@ def main():
         print(file_hash)
     # TODO: add non-`--name-only` flagged `ls-tree` functionality
     elif command == "ls-tree":
-        if len(sys.argv) < 3:
+        if not (3 <= len(sys.argv) <= 4):
             print("[Error] Usage: ls-tree [--name-only] <tree_sha>")
             return
         tree_sha = sys.argv[-1]
@@ -71,7 +71,7 @@ def main():
         is_name_only = (len(sys.argv) == 4 and sys.argv[2] == "--name-only")
 
         # Read the tree object contents
-        tree_compressed_fd = open(blob_path, "rb")
+        tree_compressed_fd = open(tree_path, "rb")
         tree_uncompressed_bytes = zlib.decompress(tree_compressed_fd.read())
         tree_uncompressed_str = tree_uncompressed_bytes.decode()
         tree_compressed_fd.close()

@@ -64,7 +64,7 @@ def main():
         if not (3 <= passed_args_count <= 4):
             print("[Error] Usage: ls-tree [--name-only] <tree_sha>")
             return
-        tree_sha = sys.argv[2] if passed_args_count == 3 else sys.argv[3]
+        tree_sha = sys.argv[-1]
         tree_path = f".{os.sep}.git{os.sep}objects{os.sep}{tree_sha[:2]}{os.sep}{tree_sha[2:]}"
         if not os.path.exists(tree_path):
             print(f"[Error] Tree object with hash '{tree_sha}' does not exist")
@@ -74,23 +74,22 @@ def main():
         # Read the tree object contents
         tree_compressed_fd = open(tree_path, "rb")
         tree_uncompressed_bytes = zlib.decompress(tree_compressed_fd.read())
-        tree_uncompressed_str = tree_uncompressed_bytes.decode()
         tree_compressed_fd.close()
         
         # Traverse tree object contents
-        space_pos = tree_uncompressed_str.find(" ")
-        space_pos = tree_uncompressed_str.find(" ", space_pos + 1)
-        null_pos = tree_uncompressed_str.find("\0")
-        null_pos = tree_uncompressed_str.find("\0", null_pos + 1)
+        space_pos = tree_uncompressed_bytes.find(b" ")
+        space_pos = tree_uncompressed_bytes.find(b" ", space_pos + 1)
+        null_pos = tree_uncompressed_bytes.find(b"\0")
+        null_pos = tree_uncompressed_bytes.find(b"\0", null_pos + 1)
 
         while space_pos != -1 and null_pos != -1:
-            name = tree_uncompressed_str[space_pos + 1:null_pos]
+            name = tree_uncompressed_bytes[space_pos + 1:null_pos].decode()
 
             if is_name_only:
                 print(name)
 
-            space_pos = tree_uncompressed_str.find(" ", space_pos + 1)
-            null_pos = tree_uncompressed_str.find("\0", null_pos + 1)
+            space_pos = tree_uncompressed_bytes.find(b" ", space_pos + 1)
+            null_pos = tree_uncompressed_bytes.find(b"\0", null_pos + 1)
         
     else:
         raise RuntimeError(f"Unknown command #{command}")

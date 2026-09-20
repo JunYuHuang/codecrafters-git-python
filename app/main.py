@@ -3,6 +3,15 @@ import os
 import zlib
 import hashlib
 
+def tree_entry_to_str(tree_bytes: bytes, space_pos: int, null_pos: int) -> str:
+    is_dir_mode = tree_bytes[space_pos - 5:space_pos] == b'40000'
+    mode = "040000" if is_dir_mode else tree_bytes[space_pos - 6:space_pos].decode()
+    object_type = "tree" if is_dir_mode else "blob"
+    object_hash = hashlib.sha1(tree_bytes[null_pos + 1:null_pos + 21]).hexdigest()
+    object_name = tree_bytes[space_pos + 1:null_pos].decode()
+    
+    return f"{mode} {object_type} {object_hash}    {object_name}"
+
 def main():
     # print("Logs from your program will appear here!", file=sys.stderr)
 
@@ -58,7 +67,6 @@ def main():
             blob_fd.write(blob_contents_compressed_bytes)
 
         print(file_hash)
-    # TODO: add non-`--name-only` flagged `ls-tree` functionality
     elif command == "ls-tree":
         passed_args_count = len(sys.argv)
         if not (3 <= passed_args_count <= 4):
@@ -71,7 +79,7 @@ def main():
             return
         is_name_only = (len(sys.argv) == 4 and sys.argv[2] == "--name-only")
 
-        # Read the tree object contents
+        # Read tree object contents
         tree_compressed_fd = open(tree_path, "rb")
         tree_uncompressed_bytes = zlib.decompress(tree_compressed_fd.read())
         tree_compressed_fd.close()
@@ -87,6 +95,11 @@ def main():
 
             if is_name_only:
                 print(name)
+            else:
+                res = tree_entry_to_str(
+                    tree_uncompressed_bytes, space_pos, null_pos
+                )
+                print(res)
 
             space_pos = tree_uncompressed_bytes.find(b" ", space_pos + 1)
             null_pos = tree_uncompressed_bytes.find(b"\0", null_pos + 1)

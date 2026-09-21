@@ -2,24 +2,122 @@ import sys
 import os
 import zlib
 import hashlib
+import stat
 
 def tree_entry_to_str(tree_bytes: bytes, space_pos: int, null_pos: int) -> str:
     is_dir_mode = tree_bytes[space_pos - 5:space_pos] == b'40000'
     mode = "040000" if is_dir_mode else tree_bytes[space_pos - 6:space_pos].decode()
     object_type = "tree" if is_dir_mode else "blob"
-    object_hash = hashlib.sha1(tree_bytes[null_pos + 1:null_pos + 21]).hexdigest()
+    object_hash = tree_bytes[null_pos + 1:null_pos + 21].hex()
     object_name = tree_bytes[space_pos + 1:null_pos].decode()
     
     return f"{mode} {object_type} {object_hash}    {object_name}"
+
+def entry_from_path(entry_path: str) -> str:
+    return entry_path.split(os.sep)[-1]
+
+def entry_mode(dir_or_file: str) -> int:
+    mode = os.stat(dir_or_file).st_mode
+    if stat.S_ISDIR(mode):
+        return 40000
+    if stat.S_ISLNK(mode):
+        return 120000
+    return 100755 if os.access(dir_or_file, os.X_OK) else 100644
+
+def create_blob_object(file_path: str) -> dict:
+    # Create Git blob object and compress it
+    file_fd = open(file_path, "rb")
+    file_contents = file_fd.read()
+    file_size = len(file_contents)
+    blob_contents_bytes = f"blob {file_size}\0".encode() + file_contents
+    blob_contents_compressed_bytes = zlib.compress(blob_contents_bytes)
+    file_fd.close()
+
+    # Write compressed Git blob object to file
+    file_hash = hashlib.sha1(blob_contents_bytes).hexdigest()
+    blob_dir = file_hash[:2]
+    blob_name = file_hash[2:]
+    blob_dir_path = f".{os.sep}.git{os.sep}objects{os.sep}{blob_dir}"
+    blob_file_path = f"{blob_dir_path}{os.sep}{blob_name}"
+    if not os.path.exists(blob_dir_path):
+        os.mkdir(blob_dir_path)
+    if not os.path.exists(blob_file_path):
+        blob_fd = open(f"{blob_dir_path}{os.sep}{blob_name}", "wb")
+        blob_fd.write(blob_contents_compressed_bytes)
+        blob_fd.close()
+
+    return {
+        "size": file_size,
+        "mode": entry_mode(file_path),
+        "name": entry_from_path(file_path),
+        "hashlib_sha1_obj": hashlib.sha1(blob_contents_bytes)
+    }
+
+def dir_contents(dir_path: str) -> list:
+    if not os.path.isdir(dir_path):
+        return []
+
+    def is_valid_entry(entry: str) -> bool:
+        if entry == ".git":
+            return False
+        entry = f"{dir_path}{os.sep}{entry}"
+        if os.path.isfile(entry):
+            return True
+        return os.path.isdir(entry) and len(os.listdir(entry)) > 0
+        
+    return sorted(filter(is_valid_entry, os.listdir(dir_path)))
+
+# TODO: to fix
+def write_tree_object(dir_path: str) -> dict:
+    contents = dir_contents(dir_path)
+    if len(contents) == 0:
+        return {}
+
+    root_dir_size = 0
+    entries = []
+    for dir_or_file in contents:
+        res_object = None
+        entry = None
+        if os.path.isfile(dir_or_file):
+            res_object = create_blob_object(dir_or_file)
+        else: # is dir
+            res_object = write_tree_object(dir_or_file)
+        if len(res_object.keys()) == 0:
+            continue
+        root_dir_size += res_object["size"]
+        entry = f"{res_object["mode"]} {res_object["name"]}\0".encode()
+        entry += res_object["hashlib_sha1_obj"].digest()
+        entries.append(entry)
+
+    tree_contents_bytes = f"tree {root_dir_size}\0".encode()
+    for entry in entries:
+        tree_contents_bytes += entry
+    tree_hash = hashlib.sha1(tree_contents_bytes).hexdigest()
+    tree_contents_compressed_bytes = zlib.compress(tree_contents_bytes)
+    tree_dir = tree_hash[:2]
+    tree_name = tree_hash[2:]
+    tree_path = f".git{os.sep}objects{os.sep}{tree_dir}"
+    if not os.path.exists(tree_path):
+        os.mkdir(tree_path)
+    with open(f"{tree_path}{os.sep}{tree_name}", "wb") as tree_fd:
+        tree_fd.write(tree_contents_compressed_bytes)
+    
+    return {
+        "size": root_dir_size,
+        "mode": entry_mode(dir_path),
+        "name": entry_from_path(dir_path),
+        "hashlib_sha1_obj": hashlib.sha1(tree_contents_bytes)
+    }
 
 def main():
     # print("Logs from your program will appear here!", file=sys.stderr)
 
     command = sys.argv[1] if len(sys.argv) > 1 else ""
     if command == "init":
-        os.mkdir(".git")
-        os.mkdir(".git/objects")
-        os.mkdir(".git/refs")
+        dirs = [".git", ".git/objects", ".git/refs"]
+        for git_dir in dirs:
+            if not os.path.exists(git_dir):
+                os.mkdir(git_dir)
         with open(".git/HEAD", "w") as f:
             f.write("ref: refs/heads/main\n")
         print("Initialized git directory")
@@ -48,25 +146,8 @@ def main():
             print(f"[Error] File '{file}' does not exist")
             return
 
-        # Create Gib blob object and compress it
-        file_fd = open(file, "r")
-        file_contents = file_fd.read()
-        file_size = len(file_contents)
-        blob_contents_str = f"blob {file_size}\0{file_contents}"
-        blob_contents_compressed_bytes = zlib.compress(blob_contents_str.encode())
-        file_fd.close()
-
-        # Write compressed Git blob object to file
-        file_hash = hashlib.sha1(blob_contents_str.encode()).hexdigest()
-        blob_dir = file_hash[:2]
-        blob_name = file_hash[2:]
-        blob_path = f".{os.sep}.git{os.sep}objects{os.sep}{blob_dir}"
-        if not os.path.exists(blob_path):
-            os.mkdir(blob_path)
-        with open(f"{blob_path}{os.sep}{blob_name}", "wb") as blob_fd:
-            blob_fd.write(blob_contents_compressed_bytes)
-
-        print(file_hash)
+        file_dict = create_blob_object(file)
+        print(file_dict["hashlib_sha1_obj"].hexdigest())
     elif command == "ls-tree":
         passed_args_count = len(sys.argv)
         if not (3 <= passed_args_count <= 4):
@@ -103,7 +184,9 @@ def main():
 
             space_pos = tree_uncompressed_bytes.find(b" ", space_pos + 1)
             null_pos = tree_uncompressed_bytes.find(b"\0", null_pos + 1)
-        
+    elif command == "write-tree":
+        tree_obj = write_tree_object(".")
+        print(tree_obj["hashlib_sha1_obj"].hexdigest())
     else:
         raise RuntimeError(f"Unknown command #{command}")
 

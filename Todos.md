@@ -6,6 +6,6 @@
 - [x] Read a blob object
 - [x] Create a blob object
 - [x] Read a tree object (minus non-`--name-only` function)
-- [ ] Write a tree object
+- [x] Write a tree object
 - [ ] Create a commit
 - [ ] Clone a repository

@@ -4,15 +4,6 @@ import zlib
 import hashlib
 import stat
 
-def tree_entry_to_str(tree_bytes: bytes, space_pos: int, null_pos: int) -> str:
-    is_dir_mode = tree_bytes[space_pos - 5:space_pos] == b'40000'
-    mode = "040000" if is_dir_mode else tree_bytes[space_pos - 6:space_pos].decode()
-    object_type = "tree" if is_dir_mode else "blob"
-    object_hash = tree_bytes[null_pos + 1:null_pos + 21].hex()
-    object_name = tree_bytes[space_pos + 1:null_pos].decode()
-    
-    return f"{mode} {object_type} {object_hash}    {object_name}"
-
 def entry_from_path(entry_path: str) -> str:
     return entry_path.split(os.sep)[-1]
 
@@ -47,7 +38,6 @@ def create_blob_object(file_path: str) -> dict:
         blob_fd.close()
 
     return {
-        "size": file_size,
         "mode": entry_mode(file_path),
         "name": entry_from_path(file_path),
         "hashlib_sha1_obj": hashlib.sha1(blob_contents_bytes)
@@ -67,7 +57,6 @@ def dir_contents(dir_path: str) -> list:
         
     return sorted(filter(is_valid_entry, os.listdir(dir_path)))
 
-# TODO: to fix
 def write_tree_object(dir_path: str) -> dict:
     contents = dir_contents(dir_path)
     if len(contents) == 0:
@@ -78,15 +67,16 @@ def write_tree_object(dir_path: str) -> dict:
     for dir_or_file in contents:
         res_object = None
         entry = None
-        if os.path.isfile(dir_or_file):
-            res_object = create_blob_object(dir_or_file)
+        dir_or_file_path = f"{dir_path}{os.sep}{dir_or_file}"
+        if os.path.isfile(dir_or_file_path):
+            res_object = create_blob_object(dir_or_file_path)
         else: # is dir
-            res_object = write_tree_object(dir_or_file)
+            res_object = write_tree_object(dir_or_file_path)
         if len(res_object.keys()) == 0:
             continue
-        root_dir_size += res_object["size"]
         entry = f"{res_object["mode"]} {res_object["name"]}\0".encode()
         entry += res_object["hashlib_sha1_obj"].digest()
+        root_dir_size += len(entry)
         entries.append(entry)
 
     tree_contents_bytes = f"tree {root_dir_size}\0".encode()
@@ -103,7 +93,6 @@ def write_tree_object(dir_path: str) -> dict:
         tree_fd.write(tree_contents_compressed_bytes)
     
     return {
-        "size": root_dir_size,
         "mode": entry_mode(dir_path),
         "name": entry_from_path(dir_path),
         "hashlib_sha1_obj": hashlib.sha1(tree_contents_bytes)
@@ -111,7 +100,6 @@ def write_tree_object(dir_path: str) -> dict:
 
 def main():
     # print("Logs from your program will appear here!", file=sys.stderr)
-
     command = sys.argv[1] if len(sys.argv) > 1 else ""
     if command == "init":
         dirs = [".git", ".git/objects", ".git/refs"]
@@ -166,24 +154,33 @@ def main():
         tree_compressed_fd.close()
         
         # Traverse tree object contents
-        space_pos = tree_uncompressed_bytes.find(b" ")
-        space_pos = tree_uncompressed_bytes.find(b" ", space_pos + 1)
-        null_pos = tree_uncompressed_bytes.find(b"\0")
-        null_pos = tree_uncompressed_bytes.find(b"\0", null_pos + 1)
+        pos = tree_uncompressed_bytes.find(b"\0") + 1
+        max_pos = len(tree_uncompressed_bytes)
 
-        while space_pos != -1 and null_pos != -1:
-            name = tree_uncompressed_bytes[space_pos + 1:null_pos].decode()
+        while pos < max_pos:
+            # Get Git object Unix mode and object type
+            is_dir_mode = tree_uncompressed_bytes[pos:pos + 5] == b'40000'
+            mode = "040000"
+            if not is_dir_mode:
+                mode = tree_uncompressed_bytes[pos:pos + 6].decode()
+            object_type = "tree" if is_dir_mode else "blob"
+
+            # Get Git object name
+            pos += 5 if is_dir_mode else 6
+            name_start_pos = pos + 1
+            null_pos = tree_uncompressed_bytes.find(b"\0", name_start_pos)
+            object_name = tree_uncompressed_bytes[name_start_pos:null_pos].decode()
+
+            # Get Git object SHA1 hash
+            object_hash = tree_uncompressed_bytes[null_pos + 1:null_pos + 21].hex()
 
             if is_name_only:
-                print(name)
+                print(object_name)
             else:
-                res = tree_entry_to_str(
-                    tree_uncompressed_bytes, space_pos, null_pos
-                )
-                print(res)
+                print(f"{mode} {object_type} {object_hash}    {object_name}")
 
-            space_pos = tree_uncompressed_bytes.find(b" ", space_pos + 1)
-            null_pos = tree_uncompressed_bytes.find(b"\0", null_pos + 1)
+            pos = null_pos
+            pos += 21
     elif command == "write-tree":
         tree_obj = write_tree_object(".")
         print(tree_obj["hashlib_sha1_obj"].hexdigest())

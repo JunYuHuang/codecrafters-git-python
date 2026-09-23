@@ -31,6 +31,7 @@
             - let `first_null_pos` = index of 1st null byte `\0` in `tree_content`
             - object header:
                 - `tree <size>\0` = `file_content[:first_null_pos]`
+                    - `<size>` = total serialized bytes in the tree bytes object after the header i.e., cumulative sum of the bytes length of all entries in the tree object
             - for each Git object entry:
                 - int `null_pos` = index of current null byte char pos in `tree_content`
                 - int `space_pos` = index of current space char in `tree_content` between the previous null byte char and the current null byte char

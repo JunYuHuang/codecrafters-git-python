@@ -63,6 +63,17 @@ Alternative:
 python {path to '/app/main.py'} {your Git command arguments}
 
 # Example:
+mkdir test_git_repo
 cd test_git_repo
 python ../app/main.py init
+```
+
+# Supported Git commands
+
+```
+python app/main.py init
+python app/main.py cat-file -p {object_sha_hash}
+python app/main.py hash-object -w {path_to_file}
+python app/main.py ls-tree [--name-only] {tree_sha_hash}
+python app/main.py write-tree
 ```

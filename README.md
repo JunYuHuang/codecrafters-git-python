@@ -71,9 +71,13 @@ python ../app/main.py init
 # Supported Git commands
 
 ```
+# Completed:
 python app/main.py init
 python app/main.py cat-file -p {object_sha_hash}
 python app/main.py hash-object -w {path_to_file}
 python app/main.py ls-tree [--name-only] {tree_sha_hash}
 python app/main.py write-tree
+
+# WIP:
+python app/main.py commit-tree {tree_sha} [-p {commit_sha}] -m "{message}"
 ```

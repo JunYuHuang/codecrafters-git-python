@@ -3,6 +3,8 @@ import os
 import zlib
 import hashlib
 import stat
+import time
+from datetime import datetime
 
 def entry_from_path(entry_path: str) -> str:
     return entry_path.split(os.sep)[-1]
@@ -98,6 +100,51 @@ def write_tree_object(dir_path: str) -> dict:
         "hashlib_sha1_obj": hashlib.sha1(tree_contents_bytes)
     }
 
+def does_object_exist(sha1_hash: str, object_type: str = "") -> bool:
+    # `sha1_hash` should be a 40-char SHA-1 hexadecimal hash string
+    if len(sha1_hash) != 40:
+        return False
+    object_path = f".git{os.sep}objects{os.sep}{sha1_hash[:2]}{os.sep}{sha1_hash[2:]}"
+    if not os.path.exists(object_path):
+        return False
+    if object_type == "":
+        return True
+    object_fd = open(object_path, "rb")
+    object_contents_uncompressed_bytes = zlib.decompress(object_fd.read())
+    object_fd.close()
+    return object_type.encode() == object_contents_uncompressed_bytes[:len(object_type)]
+
+def create_commit_object(tree_sha: str, message: str, commit_sha: str = "") -> str:
+    # Create Git commit object contents
+    timestamp = round(time.time())
+    timezone_offset = datetime.now().astimezone().strftime("%z")
+    name = "John Doe"
+    email = "john@example.com"
+    commit_contents_str = (
+        f"author {name} <{email}> {timestamp} {timezone_offset}\n" +
+        f"committer {name} <{email}> {timestamp} {timezone_offset}\n" +
+        f"\n{message}\n"
+    )
+    if commit_sha:
+        commit_contents_str = f"parent {commit_sha}\n" + commit_contents_str
+    commit_contents_str = f"tree {tree_sha}\n" + commit_contents_str
+    commit_contents_uncompressed_bytes = commit_contents_str.encode()
+    commit_size = len(commit_contents_uncompressed_bytes)
+    commit_contents_uncompressed_bytes = (
+        f"commit {commit_size}\0".encode() + commit_contents_uncompressed_bytes
+    )
+
+    # Compress Git Commit object contents + write to file
+    new_commit_sha = hashlib.sha1(commit_contents_uncompressed_bytes).hexdigest()
+    commit_dir_path = f".git{os.sep}objects{os.sep}{new_commit_sha[:2]}"
+    if not os.path.exists(commit_dir_path):
+        os.mkdir(commit_dir_path)
+    commit_file_path = f"{commit_dir_path}{os.sep}{new_commit_sha[2:]}"
+    with open(commit_file_path, "wb") as commit_fd:
+        commit_fd.write(zlib.compress(commit_contents_uncompressed_bytes))
+
+    return new_commit_sha
+
 def main():
     # print("Logs from your program will appear here!", file=sys.stderr)
     command = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -184,6 +231,36 @@ def main():
     elif command == "write-tree":
         tree_obj = write_tree_object(".")
         print(tree_obj["hashlib_sha1_obj"].hexdigest())
+    elif command == "commit-tree":
+        argv_len = len(sys.argv)
+        proper_use = "[Error] Usage: commit-tree <tree_sha> [-p <commit_sha>] -m \"<message>\""
+        if argv_len != 5 and argv_len != 7:
+            print(proper_use)
+            print("[Error] Invalid number of arguments passed")
+            return
+        if (argv_len == 7 and sys.argv[3] != "-p") or sys.argv[-2] != "-m":
+            print(proper_use)
+            print("[Error] Invalid flags passed")
+            return
+        if len(sys.argv[-1]) < 1:
+            print(proper_use)
+            print("[Error] Commit message must enclosed by double quotes and not empty")
+            print(f"Commit message: '{sys.argv[-1]}'")
+            return
+        if not does_object_exist(sys.argv[2], "tree"):
+            print(f"[Error] Tree object '{sys.argv[2]}' does not exist")
+            return
+        if argv_len == 7 and not does_object_exist(sys.argv[4], "commit"):
+            print(f"[Error] Commit object '{sys.argv[4]}' does not exist")
+            return
+
+        has_commit_sha = argv_len == 7
+        commit_sha = sys.argv[4] if has_commit_sha else ""
+        new_commit_sha = create_commit_object(
+            sys.argv[2], sys.argv[-1], commit_sha
+        )
+
+        print(new_commit_sha)
     else:
         raise RuntimeError(f"Unknown command #{command}")
 

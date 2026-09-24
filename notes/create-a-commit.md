@@ -11,14 +11,21 @@
         - N/A
     - side effects:
         - creates a Git commit object stored in a Git project root dir at:
-            - `.git/objects/<commit_sha[0:2]>/<commit_sha[2:40]>`
-        - prints its created Git commit object's SHA-1 hexadecimal hash string
-        - if called without `[-p <commit_sha>]` flag,
-            - sets its created commit object's own SHA-1 hexadecimal hash as its own parent SHA-1 hash
+            - `.git/objects/<new_commit_sha[0:2]>/<new_commit_sha[2:40]>`
+                - where `<new_commit_sha?` is the 40-char SHA-1 hexadecimal string of the new Git commit object's contents
+        - prints `<new_commit_sha>`
         - if called with `[-p <commit_sha>]` flag,
-            - uses `<commit_sha>` as the newly created commit object's parent SHA-1 hash
+            - adds line `"parent <commit_sha>` right after commit header in commit object body content
     - commit object anatomy (after zlib decompression):
-        - content format:
+        - content format (if command called w/o optional `-p <commit_sha>` flag):
+        ```
+        commit <size>\0tree <tree_sha>
+        author <name> <<email>> <timestamp> <timezone>
+        committer <name> <<email>> <timestamp> <timezone>
+
+        <commit message>
+        ```
+        - content format (if command called w/ optional `-p <commit_sha>` flag):
         ```
         commit <size>\0tree <tree_sha>
         parent <parent_sha>
@@ -27,7 +34,7 @@
 
         <commit message>
         ```
-        - line 1 is binary-encoded, rest of lines are plain text
+        - all lines are binary-encoded given the plaintext content
         - each line ends with a newline `\n` char
         - line 6 is a blank line (i.e., just a newline char)
         - `<size>` = length (in bytes) of rest of plain text contents
@@ -40,15 +47,31 @@
     - questions:
         - how to get seconds since epoch in Python?
         - how to get timezone offset in Python?
+        - in the commit object,
+            - where does `<tree_sha>` in line 1 (commit header) come from?
+                - from `<tree_sha>` argument when running command in form `commit-tree <tree_sha> [-p <commit_sha>] -m <message>`
+            - where does `<parent_sha>` in line 2 come from?
+                - from `<commit_sha>` argument when running command in form `commit-tree <tree_sha> -p <commit_sha> -m <message>`
+                - this line only exists if command called and passes the optional flag `-p <commit_sha>`
+        - can commit message `<message>` be empty?
+            - let's assume it can't be
 - PEDAC: Examples
     - ex.1
         ```
+        $ mkdir test_dir && cd test_dir
+        $ git init
+        Initialized empty Git repository in /path/to/test_dir/.git/
+
+        # Create a tree, get its SHA
+        $ echo "hello world" > test.txt
+        $ git add test.txt
+        $ git write-tree
+        4b825dc642cb6eb9a060e54bf8d69288fbee4904
+
         # Create the initial commit
         $ git commit-tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 -m "Initial commit"
         3b18e512dba79e4c8300dd08aeb37f8e728b8dad
-        ```
-    - ex.2
-        ```
+
         # Write some changes, get another tree SHA
         $ echo "hello world 2" > test.txt
         $ git add test.txt
@@ -74,27 +97,25 @@
         - set `has_commit_sha` to true
     - set int `timestamp` to seconds since epoch time
     - set string `timezone` to timezone offset
-    - set string `body_lines_str` to:
+    - set bytes `commit_contents_uncompressed_bytes` from string:
         ```
-        "parent <tree_sha>\n" +
         "author John Doe <john@example.com> <timestamp> <timezone>\n" +
         "committer John Doe <john@example.com> <timestamp> <timezone>\n" +
         "\n" +
         "<message[1:-1]\n>
         ```
-    - set string `new_commit_sha` to empty string
+    - set bytes `new_commit_sha` to bytes from empty string
     - if `has_commit_sha`,
-        - set `new_commit_sha` to `<commit_sha>` 
-    - if `tree_sha` is empty string,
-        - set `new_commit_sha` to SHA-1 hexadecimal hash string of `body_lines_str` ?
-    - set int `commit_size` to length of `body_lines_str`
-    - set bytes `header_bytes` from string `commit <commit_size>\0tree <tree_sha>`
-    - create dir at `".git/objects/<new_commit_sha[0:2]>` if needed
-    - open file `commit_fd` with write permissions in bytes mode
-    - write bytes `header_bytes` to `commit_fd`
+        - prepend bytes `"parent <commit_sha>"` to `commit_contents_uncompressed_bytes`
+    - prepend bytes `"tree <tree_sha>\n"` to `commit_contents_uncompressed_bytes`
+    - set int `commit_size` to length of `commit_contents_uncompressed_bytes`
+    - prepend bytes `commit <commit_size>\0>` to `commit_contents_uncompressed_bytes`
+    - set string `new_commit_sha` from `commit_contents_uncompressed_bytes` as 40-char SHA-1 hexadecimal hash string
+    - create dir at `.git/objects/<new_commit_sha[0:2]>` if needed
+    - open file `commit_fd` at `.git/objects/<new_commit_sha[0:2]>/<new_commit_sha[2:]>` with write permissions in bytes mode
+    - write zlib-compressed `commit_contents_uncompressed_bytes` to `commit_fd`
     - close file `commit_fd`
-    - open file `commit_fd` with permissions in plain-text mode (w/ UTF8 encoding)
-    - write string TODO
+    - return `new_commit_sha`
     - helper functions:
         - `does_object_exist(sha1_hash: string, object_type: string = "") -> boolean`:
             - returns true if:
